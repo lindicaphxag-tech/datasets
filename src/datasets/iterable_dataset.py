@@ -1182,7 +1182,14 @@ class HorizontallyConcatenatedMultiSourcesExamplesIterable(_BaseExamplesIterable
                     _check_column_names(
                         [column_name for pa_table in pa_tables for column_name in pa_table.column_names]
                     )
+                max_num_rows = max(table.num_rows for table in pa_tables)
                 for j, table in enumerate(pa_tables):
+                    if table.num_rows < max_num_rows:
+                        padding = pa.Table.from_arrays(
+                            [pa.nulls(max_num_rows - table.num_rows, type=field.type) for field in table.schema],
+                            schema=table.schema,
+                        )
+                        table = pa.concat_tables([table, padding])
                     if j == 0:
                         new_pa_table = table
                     else:
