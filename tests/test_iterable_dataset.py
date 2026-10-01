@@ -2880,6 +2880,27 @@ def test_concatenate_datasets_axis_1_arrow_format():
     assert table.to_pydict() == {"a": [1, 2], "b": [3, 4], "c": [5, 6]}
 
 
+
+def test_concatenate_datasets_axis_1_arrow_format_with_different_lengths():
+    ds1 = Dataset.from_dict({"a": [0, 1, 2, 3, 4]}).to_iterable_dataset()
+    ds2 = Dataset.from_dict({"b": [0, 1, 2]}).to_iterable_dataset()
+
+    concatenated = concatenate_datasets([ds1, ds2], axis=1)
+    assert list(concatenated) == [
+        {"a": 0, "b": 0},
+        {"a": 1, "b": 1},
+        {"a": 2, "b": 2},
+        {"a": 3, "b": None},
+        {"a": 4, "b": None},
+    ]
+
+    table = pa.concat_tables(concatenate_datasets([ds2, ds1], axis=1).with_format("arrow"))
+    assert table.to_pydict() == {
+        "b": [0, 1, 2, None, None],
+        "a": [0, 1, 2, 3, 4],
+    }
+
+
 @require_torch
 @require_tf
 @require_jax
