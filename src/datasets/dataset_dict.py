@@ -525,7 +525,10 @@ class DatasetDict(dict[Union[str, NamedSplit], "Dataset"]):
         """
         self._check_values_type()
         encoded = DatasetDict(
-            {k: dataset.class_encode_column(column=column, include_nulls=include_nulls) for k, dataset in self.items()}
+            {
+                split: dataset.class_encode_column(column=column, include_nulls=include_nulls)
+                for split, dataset in self.items()
+            }
         )
 
         class_names = sorted(
@@ -557,7 +560,9 @@ class DatasetDict(dict[Union[str, NamedSplit], "Dataset"]):
                 desc="Aligning class labels across splits",
             )
 
-        return DatasetDict({split: align_class_labels(dataset) for split, dataset in encoded.items()})
+        return DatasetDict(
+            {split: align_class_labels(dataset) for split, dataset in encoded.items()}
+        )
 
     @contextlib.contextmanager
     def formatted_as(
