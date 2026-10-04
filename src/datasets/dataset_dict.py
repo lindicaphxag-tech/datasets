@@ -550,7 +550,7 @@ class DatasetDict(dict[Union[str, NamedSplit], "Dataset"]):
             new_features = dataset.features.copy()
             new_features[column] = global_label
 
-            def remap_batch(batch):
+            def remap_batch(batch, local_to_global=local_to_global):
                 batch[column] = [
                     local_to_global[label] if label is not None else None for label in batch[column]
                 ]
