@@ -31,7 +31,7 @@ from .arrow_dataset import (
     Dataset,
     _get_updated_dataset_card,
 )
-from .features import Features
+from .features import ClassLabel, Features
 from .features.features import FeatureType
 from .iterable_dataset import IterableDataset
 from .naming import _split_re
@@ -524,9 +524,41 @@ class DatasetDict(dict[Union[str, NamedSplit], "Dataset"]):
         ```
         """
         self._check_values_type()
-        return DatasetDict(
+        encoded = DatasetDict(
             {k: dataset.class_encode_column(column=column, include_nulls=include_nulls) for k, dataset in self.items()}
         )
+
+        class_names = sorted(
+            {
+                class_name
+                for dataset in encoded.values()
+                for class_name in dataset.features[column].names
+            }
+        )
+        shared_feature = ClassLabel(names=class_names)
+
+        def align_class_labels(dataset):
+            local_feature = dataset.features[column]
+            if local_feature.names == shared_feature.names:
+                return dataset
+
+            def remap_batch(batch):
+                batch[column] = [
+                    shared_feature.str2int(local_feature.int2str(value)) if value is not None else None
+                    for value in batch[column]
+                ]
+                return batch
+
+            features = dataset.features.copy()
+            features[column] = shared_feature
+            return dataset.map(
+                remap_batch,
+                batched=True,
+                features=features,
+                desc="Aligning class labels across splits",
+            )
+
+        return DatasetDict({split: align_class_labels(dataset) for split, dataset in encoded.items()})
 
     @contextlib.contextmanager
     def formatted_as(
