@@ -542,11 +542,10 @@ class DatasetDict(dict[Union[str, NamedSplit], "Dataset"]):
             if local_feature.names == shared_feature.names:
                 return dataset
 
+            id_map = [shared_feature.str2int(class_name) for class_name in local_feature.names]
+
             def remap_batch(batch):
-                batch[column] = [
-                    shared_feature.str2int(local_feature.int2str(value)) if value is not None else None
-                    for value in batch[column]
-                ]
+                batch[column] = [id_map[value] if value is not None else None for value in batch[column]]
                 return batch
 
             features = dataset.features.copy()
