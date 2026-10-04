@@ -86,6 +86,13 @@ class DatasetDictTest(TestCase):
         assert encoded["train"]["label"] == [1, None]
         assert encoded["test"]["label"] == [0, None]
 
+        encoded_with_nulls = dataset_dict.class_encode_column("label", include_nulls=True)
+        expected_feature_with_nulls = ClassLabel(names=["None", "a", "b"])
+        assert encoded_with_nulls["train"].features["label"] == expected_feature_with_nulls
+        assert encoded_with_nulls["test"].features["label"] == expected_feature_with_nulls
+        assert encoded_with_nulls["train"]["label"] == [2, 0]
+        assert encoded_with_nulls["test"]["label"] == [1, 0]
+
     def _create_dummy_iterable_dataset(self, multiple_columns=False) -> IterableDataset:
         def gen():
             if multiple_columns:
