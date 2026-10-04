@@ -344,6 +344,14 @@ def test_classlabel_int2str():
         classlabel.int2str(None)
 
 
+def test_classlabel_int2str_accepts_one_shot_iterables():
+    classlabel = ClassLabel(names=["negative", "positive"])
+
+    values = (value for value in [0, 1])
+
+    assert classlabel.int2str(values) == ["negative", "positive"]
+
+
 def test_classlabel_cast_storage():
     names = ["negative", "positive"]
     classlabel = ClassLabel(names=names)
