@@ -51,6 +51,41 @@ class DatasetDictTest(TestCase):
             }
         )
 
+    def test_class_encode_column_uses_shared_labels_across_splits(self):
+        dataset_dict = DatasetDict(
+            {
+                "train": Dataset.from_dict({"label": ["b", "a", "b"]}),
+                "validation": Dataset.from_dict({"label": []}, features=Features({"label": Value("string")})),
+                "test": Dataset.from_dict({"label": ["b", "c"]}),
+            }
+        )
+
+        encoded = dataset_dict.class_encode_column("label")
+
+        expected_feature = ClassLabel(names=["a", "b", "c"])
+        assert encoded["train"].features["label"] == expected_feature
+        assert encoded["validation"].features["label"] == expected_feature
+        assert encoded["test"].features["label"] == expected_feature
+        assert encoded["train"]["label"] == [1, 0, 1]
+        assert encoded["validation"]["label"] == []
+        assert encoded["test"]["label"] == [1, 2]
+
+    def test_class_encode_column_preserves_nulls_with_shared_labels(self):
+        dataset_dict = DatasetDict(
+            {
+                "train": Dataset.from_dict({"label": ["b", None]}),
+                "test": Dataset.from_dict({"label": ["a", None]}),
+            }
+        )
+
+        encoded = dataset_dict.class_encode_column("label")
+
+        expected_feature = ClassLabel(names=["a", "b"])
+        assert encoded["train"].features["label"] == expected_feature
+        assert encoded["test"].features["label"] == expected_feature
+        assert encoded["train"]["label"] == [1, None]
+        assert encoded["test"]["label"] == [0, None]
+
     def _create_dummy_iterable_dataset(self, multiple_columns=False) -> IterableDataset:
         def gen():
             if multiple_columns:
