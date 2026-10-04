@@ -246,6 +246,22 @@ class DatasetDictTest(TestCase):
             self.assertDictEqual(dset_split.format, dset_split2.format)
         del dset, dset2
 
+    def test_class_encode_column_aligns_labels_across_splits(self):
+        dset = DatasetDict(
+            {
+                "train": Dataset.from_dict({"label": ["b", "c", "b"]}),
+                "test": Dataset.from_dict({"label": ["a", "b", "a"]}),
+            }
+        )
+
+        encoded = dset.class_encode_column("label")
+
+        expected_feature = ClassLabel(names=["a", "b", "c"])
+        self.assertEqual(encoded["train"].features["label"], expected_feature)
+        self.assertEqual(encoded["test"].features["label"], expected_feature)
+        self.assertListEqual(encoded["train"]["label"][:], [1, 2, 1])
+        self.assertListEqual(encoded["test"]["label"][:], [0, 1, 0])
+
     def test_cast(self):
         dset = self._create_dummy_dataset_dict(multiple_columns=True)
         features = dset["train"].features
