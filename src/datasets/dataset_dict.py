@@ -31,7 +31,7 @@ from .arrow_dataset import (
     Dataset,
     _get_updated_dataset_card,
 )
-from .features import ClassLabel, Features, LargeList, List
+from .features import ClassLabel, Features
 from .features.features import FeatureType
 from .iterable_dataset import IterableDataset
 from .naming import _split_re
@@ -530,74 +530,40 @@ class DatasetDict(dict[Union[str, NamedSplit], "Dataset"]):
         if not encoded:
             return encoded
 
-        def get_class_label(feature):
-            if isinstance(feature, ClassLabel):
-                return feature
-            if isinstance(feature, (List, LargeList)) and isinstance(feature.feature, ClassLabel):
-                return feature.feature
-            raise TypeError(
-                f"Expected an encoded ClassLabel feature for column {column}, got {type(feature).__name__}."
-            )
-
         class_names = sorted(
             {
                 class_name
                 for dataset in encoded.values()
-                for class_name in get_class_label(dataset.features[column]).names
+                for class_name in dataset.features[column].names
             }
         )
         global_label = ClassLabel(names=class_names)
-        global_id = {name: idx for idx, name in enumerate(class_names)}
+        aligned = {}
 
-        def align_split(dataset):
-            feature = dataset.features[column]
-            local_label = get_class_label(feature)
+        for split, dataset in encoded.items():
+            local_label = dataset.features[column]
             if local_label.names == class_names:
-                return dataset
+                aligned[split] = dataset
+                continue
 
-            local_to_global = [global_id[name] for name in local_label.names]
+            local_to_global = [global_label.str2int(name) for name in local_label.names]
             new_features = dataset.features.copy()
-            if isinstance(feature, ClassLabel):
-                new_features[column] = global_label
+            new_features[column] = global_label
 
-                def remap_batch(batch):
-                    batch[column] = [
-                        local_to_global[label] if label is not None else None for label in batch[column]
-                    ]
-                    return batch
+            def remap_batch(batch):
+                batch[column] = [
+                    local_to_global[label] if label is not None else None for label in batch[column]
+                ]
+                return batch
 
-            elif isinstance(feature, List):
-                new_features[column] = List(global_label, length=feature.length)
-
-                def remap_batch(batch):
-                    batch[column] = [
-                        [local_to_global[label] if label is not None else None for label in sample]
-                        if sample is not None
-                        else None
-                        for sample in batch[column]
-                    ]
-                    return batch
-
-            else:
-                new_features[column] = LargeList(global_label)
-
-                def remap_batch(batch):
-                    batch[column] = [
-                        [local_to_global[label] if label is not None else None for label in sample]
-                        if sample is not None
-                        else None
-                        for sample in batch[column]
-                    ]
-                    return batch
-
-            return dataset.map(
+            aligned[split] = dataset.map(
                 remap_batch,
                 batched=True,
                 features=new_features,
                 desc="Aligning class labels across splits",
             )
 
-        return DatasetDict({k: align_split(dataset) for k, dataset in encoded.items()})
+        return DatasetDict(aligned)
 
     @contextlib.contextmanager
     def formatted_as(
