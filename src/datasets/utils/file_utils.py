@@ -1421,22 +1421,38 @@ class FilesIterable(TrackedIterableFromGenerator):
         if not isinstance(urlpaths, list):
             urlpaths = [urlpaths]
         for urlpath in urlpaths:
-            if xisfile(urlpath, download_config=download_config):
-                yield urlpath
-            elif xisdir(urlpath, download_config=download_config):
-                for dirpath, dirnames, filenames in xwalk(urlpath, download_config=download_config):
-                    # in-place modification to prune the search
-                    dirnames[:] = sorted([dirname for dirname in dirnames if not dirname.startswith((".", "__"))])
-                    if xbasename(dirpath).startswith((".", "__")):
-                        # skipping hidden directories
-                        continue
-                    for filename in sorted(filenames):
-                        if filename.startswith((".", "__")):
-                            # skipping hidden files
+            # Metadata checks can transiently return false for a still-existing
+            # remote shard. Retry the *lookup*, not the streaming iterator:
+            # retrying a partially consumed generator could duplicate examples.
+            max_retries = max(0, download_config.max_retries if download_config is not None else 1)
+            for attempt in range(max_retries + 1):
+                if xisfile(urlpath, download_config=download_config):
+                    yield urlpath
+                    break
+                if xisdir(urlpath, download_config=download_config):
+                    for dirpath, dirnames, filenames in xwalk(urlpath, download_config=download_config):
+                        # in-place modification to prune the search
+                        dirnames[:] = sorted([dirname for dirname in dirnames if not dirname.startswith((".", "__"))])
+                        if xbasename(dirpath).startswith((".", "__")):
+                            # skipping hidden directories
                             continue
-                        yield xjoin(dirpath, filename)
-            else:
-                raise FileNotFoundError(urlpath)
+                        for filename in sorted(filenames):
+                            if filename.startswith((".", "__")):
+                                # skipping hidden files
+                                continue
+                            yield xjoin(dirpath, filename)
+                    break
+                if not is_remote_url(str(urlpath)) or attempt == max_retries:
+                    raise FileNotFoundError(urlpath)
+                # Cap the exponent before computing it: large user-provided
+                # retry budgets must not create enormous intermediate integers.
+                delay = 2 ** min(attempt, 3)
+                # Do not log the URL: remote paths may embed signed credentials.
+                logger.warning(
+                    f"Remote dataset file temporarily unavailable. Retrying lookup in {delay}s "
+                    f"[{attempt + 1}/{max_retries}]"
+                )
+                time.sleep(delay)
 
     @classmethod
     def from_urlpaths(cls, urlpaths, download_config: Optional[DownloadConfig] = None) -> "FilesIterable":
